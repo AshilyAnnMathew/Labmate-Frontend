@@ -62,6 +62,14 @@ export const authAPI = {
       method: 'POST',
     });
   },
+
+  // Update user profile
+  updateProfile: async (profileData) => {
+    return apiRequest('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(profileData),
+    });
+  },
 };
 
 // Verification API
@@ -293,6 +301,26 @@ export const testAPI = {
     }
   },
 
+  // Get single test by id
+  getTestById: async (testId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/tests/${testId}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch test');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error fetching test:', error);
+      throw error;
+    }
+  },
+
   // Create new test
   createTest: async (testData) => {
     try {
@@ -300,11 +328,15 @@ export const testAPI = {
       
       // Add all fields to form data
       Object.keys(testData).forEach(key => {
-        if (key === 'image' && testData[key]) {
-          formData.append('image', testData[key]);
-        } else if (testData[key] !== null && testData[key] !== undefined && key !== 'imagePreview') {
-          formData.append(key, testData[key]);
+        const value = testData[key];
+        if (key === 'image' && value) {
+          formData.append('image', value);
+          return;
         }
+        if (key === 'imagePreview' || value === null || value === undefined) return;
+        // Serialize arrays/objects so backend can parse JSON strings
+        const isObjectLike = typeof value === 'object';
+        formData.append(key, isObjectLike ? JSON.stringify(value) : value);
       });
 
       const response = await fetch(`${API_BASE_URL}/tests`, {
@@ -332,11 +364,14 @@ export const testAPI = {
       
       // Add all fields to form data
       Object.keys(testData).forEach(key => {
-        if (key === 'image' && testData[key]) {
-          formData.append('image', testData[key]);
-        } else if (testData[key] !== null && testData[key] !== undefined && key !== 'imagePreview') {
-          formData.append(key, testData[key]);
+        const value = testData[key];
+        if (key === 'image' && value) {
+          formData.append('image', value);
+          return;
         }
+        if (key === 'imagePreview' || value === null || value === undefined) return;
+        const isObjectLike = typeof value === 'object';
+        formData.append(key, isObjectLike ? JSON.stringify(value) : value);
       });
 
       const response = await fetch(`${API_BASE_URL}/tests/${testId}`, {
@@ -408,11 +443,19 @@ export const packageAPI = {
       
       // Add all fields to form data
       Object.keys(packageData).forEach(key => {
-        if (key === 'image' && packageData[key]) {
-          formData.append('image', packageData[key]);
-        } else if (packageData[key] !== null && packageData[key] !== undefined && key !== 'imagePreview') {
-          formData.append(key, packageData[key]);
+        const value = packageData[key];
+        if (key === 'image' && value) {
+          formData.append('image', value);
+          return;
         }
+        if (key === 'imagePreview' || value === null || value === undefined) return;
+        // special-case selectedTests as multiple fields for common backends
+        if (key === 'selectedTests' && Array.isArray(value)) {
+          value.forEach(v => formData.append('selectedTests[]', v));
+          return;
+        }
+        const isObjectLike = typeof value === 'object';
+        formData.append(key, isObjectLike ? JSON.stringify(value) : value);
       });
 
       const response = await fetch(`${API_BASE_URL}/packages`, {
@@ -440,11 +483,18 @@ export const packageAPI = {
       
       // Add all fields to form data
       Object.keys(packageData).forEach(key => {
-        if (key === 'image' && packageData[key]) {
-          formData.append('image', packageData[key]);
-        } else if (packageData[key] !== null && packageData[key] !== undefined && key !== 'imagePreview') {
-          formData.append(key, packageData[key]);
+        const value = packageData[key];
+        if (key === 'image' && value) {
+          formData.append('image', value);
+          return;
         }
+        if (key === 'imagePreview' || value === null || value === undefined) return;
+        if (key === 'selectedTests' && Array.isArray(value)) {
+          value.forEach(v => formData.append('selectedTests[]', v));
+          return;
+        }
+        const isObjectLike = typeof value === 'object';
+        formData.append(key, isObjectLike ? JSON.stringify(value) : value);
       });
 
       const response = await fetch(`${API_BASE_URL}/packages/${packageId}`, {
@@ -487,134 +537,6 @@ export const packageAPI = {
   }
 };
 
-// Lab API
-const labAPI = {
-  // Get all labs
-  getLabs: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/labs`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch labs');
-      }
-      return data;
-    } catch (error) {
-      console.error('Error fetching labs:', error);
-      throw error;
-    }
-  },
-
-  // Get single lab
-  getLab: async (labId) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/labs/${labId}`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to fetch lab');
-      }
-      return data;
-    } catch (error) {
-      console.error('Error fetching lab:', error);
-      throw error;
-    }
-  },
-
-  // Create new lab
-  createLab: async (labData) => {
-    try {
-      console.log('API: Creating lab with data:', labData);
-      
-      const jsonData = JSON.stringify(labData);
-      console.log('API: JSON stringified data:', jsonData);
-      
-      // Test if JSON is valid
-      try {
-        JSON.parse(jsonData);
-        console.log('API: JSON is valid');
-      } catch (jsonError) {
-        console.error('API: Invalid JSON:', jsonError);
-        throw new Error('Invalid JSON data');
-      }
-      
-      const response = await fetch(`${API_BASE_URL}/labs`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: jsonData
-      });
-      
-      console.log('API: Response status:', response.status);
-      
-      const data = await response.json();
-      console.log('API: Response data:', data);
-      
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to create lab');
-      }
-      return data;
-    } catch (error) {
-      console.error('Error creating lab:', error);
-      throw error;
-    }
-  },
-
-  // Update lab
-  updateLab: async (labId, labData) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/labs/${labId}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(labData)
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to update lab');
-      }
-      return data;
-    } catch (error) {
-      console.error('Error updating lab:', error);
-      throw error;
-    }
-  },
-
-  // Delete lab
-  deleteLab: async (labId) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/labs/${labId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${getAuthToken()}`,
-          'Content-Type': 'application/json'
-        }
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.message || 'Failed to delete lab');
-      }
-      return data;
-    } catch (error) {
-      console.error('Error deleting lab:', error);
-      throw error;
-    }
-  }
-};
 
 // Booking API
 const bookingAPI = {
@@ -745,11 +667,255 @@ const bookingAPI = {
       console.error('Error cancelling booking:', error);
       throw error;
     }
+  },
+
+  // Update booking status
+  updateBookingStatus: async (bookingId, status) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update booking status');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error updating booking status:', error);
+      throw error;
+    }
+  },
+
+  // Upload report for booking
+  uploadReport: async (bookingId, reportFile) => {
+    try {
+      const formData = new FormData();
+      formData.append('reportFile', reportFile);
+      
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/upload-report`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`
+        },
+        body: formData
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to upload report');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error uploading report:', error);
+      throw error;
+    }
+  },
+
+  // Update booking status
+  updateBookingStatus: async (bookingId, status) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update booking status');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error updating booking status:', error);
+      throw error;
+    }
+  },
+
+  // Process payment for booking
+  processPayment: async (bookingId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/payment`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({})
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to process payment');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      throw error;
+    }
+  }
+
+};
+
+// Results API for bookings
+export const resultsAPI = {
+  // Submit results JSON for a booking
+  submitResults: async (bookingId, testResults) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/results`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ testResults })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to submit results');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error submitting results:', error);
+      throw error;
+    }
+  }
+};
+
+// Lab API
+export const labAPI = {
+  // Get all labs
+  getLabs: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/labs`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch labs');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error fetching labs:', error);
+      throw error;
+    }
+  },
+
+  // Get lab by ID
+  getLab: async (labId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/labs/${labId}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch lab');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error fetching lab:', error);
+      throw error;
+    }
+  },
+
+  // Create new lab
+  createLab: async (labData) => {
+    try {
+      console.log('API: Creating lab with data:', labData);
+      
+      const jsonData = JSON.stringify(labData);
+      console.log('API: JSON stringified data:', jsonData);
+      
+      // Test if JSON is valid
+      try {
+        JSON.parse(jsonData);
+        console.log('API: JSON is valid');
+      } catch (jsonError) {
+        console.error('API: Invalid JSON:', jsonError);
+        throw new Error('Invalid JSON data');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/labs`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: jsonData
+      });
+      
+      console.log('API: Response status:', response.status);
+      
+      const data = await response.json();
+      console.log('API: Response data:', data);
+      
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create lab');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error creating lab:', error);
+      throw error;
+    }
+  },
+
+  // Update lab
+  updateLab: async (labId, labData) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/labs/${labId}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(labData)
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update lab');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error updating lab:', error);
+      throw error;
+    }
+  },
+
+  // Delete lab
+  deleteLab: async (labId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/labs/${labId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete lab');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error deleting lab:', error);
+      throw error;
+    }
   }
 };
 
 // Local Admin API
-const localAdminAPI = {
+export const localAdminAPI = {
   // Get staff members for a specific lab
   getLabStaff: async (labId) => {
     try {
@@ -1129,6 +1295,7 @@ export default {
   packageAPI,
   labAPI,
   bookingAPI,
+  resultsAPI,
   localAdminAPI,
   setAuthToken,
   getAuthToken,

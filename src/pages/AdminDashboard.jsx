@@ -129,6 +129,7 @@ const AdminDashboard = () => {
       price: '',
       duration: '',
       preparation: '',
+      resultFields: [],
       image: null,
       imagePreview: null
     })
@@ -244,7 +245,7 @@ const AdminDashboard = () => {
           return
         }
 
-        // Create test
+        // Create test (includes resultFields if provided)
         const response = await testAPI.createTest(newTest)
         
         // Refresh tests list
@@ -259,6 +260,7 @@ const AdminDashboard = () => {
           price: '',
           duration: '',
           preparation: '',
+          resultFields: [],
           image: null,
           imagePreview: null
         })
@@ -305,7 +307,7 @@ const AdminDashboard = () => {
           return
         }
 
-        // Update test
+        // Update test (includes resultFields if provided)
         const response = await testAPI.updateTest(selectedTest._id, newTest)
         
         // Refresh tests list
@@ -321,6 +323,7 @@ const AdminDashboard = () => {
           price: '',
           duration: '',
           preparation: '',
+          resultFields: [],
           image: null,
           imagePreview: null
         })
@@ -553,6 +556,33 @@ const AdminDashboard = () => {
       }))
     }
 
+    // Result fields handlers for tests
+    const addResultField = () => {
+      setNewTest(prev => ({
+        ...prev,
+        resultFields: [
+          ...((prev.resultFields) || []),
+          { label: '', unit: '', referenceRange: '', type: 'text', required: false }
+        ]
+      }))
+    }
+
+    const updateResultField = (index, key, value) => {
+      setNewTest(prev => {
+        const updated = [...(prev.resultFields || [])]
+        updated[index] = { ...updated[index], [key]: value }
+        return { ...prev, resultFields: updated }
+      })
+    }
+
+    const removeResultField = (index) => {
+      setNewTest(prev => {
+        const updated = [...(prev.resultFields || [])]
+        updated.splice(index, 1)
+        return { ...prev, resultFields: updated }
+      })
+    }
+
     // Filter tests
     const filteredTests = tests.filter(test => {
       const matchesSearch = test.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -694,6 +724,7 @@ const AdminDashboard = () => {
                                 price: test.price,
                                 duration: test.duration,
                                 preparation: test.preparation || '',
+                            resultFields: Array.isArray(test.resultFields) ? test.resultFields : [],
                                 image: null,
                                 imagePreview: test.image ? (test.image.startsWith('http') ? test.image : `http://localhost:5000/${test.image}`) : null
                               })
@@ -1002,6 +1033,91 @@ const AdminDashboard = () => {
                     </div>
                   )}
                   
+                  {/* Result Fields */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">Result Fields</label>
+                      <button
+                        type="button"
+                        onClick={addResultField}
+                        className="text-sm px-2 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
+                      >
+                        Add Field
+                      </button>
+                    </div>
+                    {(newTest.resultFields && newTest.resultFields.length > 0) ? (
+                      <div className="space-y-3">
+                        {newTest.resultFields.map((field, idx) => (
+                          <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                            <div className="col-span-3">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
+                              <input
+                                type="text"
+                                value={field.label}
+                                onChange={(e) => updateResultField(idx, 'label', e.target.value)}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="e.g., Hemoglobin"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Unit</label>
+                              <input
+                                type="text"
+                                value={field.unit}
+                                onChange={(e) => updateResultField(idx, 'unit', e.target.value)}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="g/dL"
+                              />
+                            </div>
+                            <div className="col-span-4">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Reference Range</label>
+                              <input
+                                type="text"
+                                value={field.referenceRange}
+                                onChange={(e) => updateResultField(idx, 'referenceRange', e.target.value)}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="13.5 - 17.5"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                              <select
+                                value={field.type || 'text'}
+                                onChange={(e) => updateResultField(idx, 'type', e.target.value)}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              >
+                                <option value="text">Text</option>
+                                <option value="number">Number</option>
+                                <option value="boolean">Yes/No</option>
+                              </select>
+                            </div>
+                            <div className="col-span-1 flex items-center">
+                              <input
+                                id={`req-${idx}`}
+                                type="checkbox"
+                                checked={!!field.required}
+                                onChange={(e) => updateResultField(idx, 'required', e.target.checked)}
+                                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded mr-2"
+                              />
+                              <label htmlFor={`req-${idx}`} className="text-xs text-gray-700">Req</label>
+                            </div>
+                            <div className="col-span-12 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => removeResultField(idx)}
+                                className="text-red-600 text-xs hover:text-red-800"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">No fields added yet.</p>
+                    )}
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Preparation Instructions</label>
                     <textarea
@@ -1386,6 +1502,91 @@ const AdminDashboard = () => {
                     </div>
                   )}
                   
+                  {/* Result Fields */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="block text-sm font-medium text-gray-700">Result Fields</label>
+                      <button
+                        type="button"
+                        onClick={addResultField}
+                        className="text-sm px-2 py-1 bg-primary-600 text-white rounded hover:bg-primary-700"
+                      >
+                        Add Field
+                      </button>
+                    </div>
+                    {(newTest.resultFields && newTest.resultFields.length > 0) ? (
+                      <div className="space-y-3">
+                        {newTest.resultFields.map((field, idx) => (
+                          <div key={idx} className="grid grid-cols-12 gap-2 items-end">
+                            <div className="col-span-3">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Label</label>
+                              <input
+                                type="text"
+                                value={field.label}
+                                onChange={(e) => updateResultField(idx, 'label', e.target.value)}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="e.g., Hemoglobin"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Unit</label>
+                              <input
+                                type="text"
+                                value={field.unit}
+                                onChange={(e) => updateResultField(idx, 'unit', e.target.value)}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="g/dL"
+                              />
+                            </div>
+                            <div className="col-span-4">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Reference Range</label>
+                              <input
+                                type="text"
+                                value={field.referenceRange}
+                                onChange={(e) => updateResultField(idx, 'referenceRange', e.target.value)}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                                placeholder="13.5 - 17.5"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label className="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                              <select
+                                value={field.type || 'text'}
+                                onChange={(e) => updateResultField(idx, 'type', e.target.value)}
+                                className="w-full px-2 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              >
+                                <option value="text">Text</option>
+                                <option value="number">Number</option>
+                                <option value="boolean">Yes/No</option>
+                              </select>
+                            </div>
+                            <div className="col-span-1 flex items-center">
+                              <input
+                                id={`edit-req-${idx}`}
+                                type="checkbox"
+                                checked={!!field.required}
+                                onChange={(e) => updateResultField(idx, 'required', e.target.checked)}
+                                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded mr-2"
+                              />
+                              <label htmlFor={`edit-req-${idx}`} className="text-xs text-gray-700">Req</label>
+                            </div>
+                            <div className="col-span-12 flex justify-end">
+                              <button
+                                type="button"
+                                onClick={() => removeResultField(idx)}
+                                className="text-red-600 text-xs hover:text-red-800"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-gray-500">No fields added yet.</p>
+                    )}
+                  </div>
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Preparation Instructions</label>
                     <textarea

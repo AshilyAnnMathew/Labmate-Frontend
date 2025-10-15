@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Calendar, Clock, User, Phone, MapPin, Filter, Search, Eye } from 'lucide-react'
+import { Calendar, Clock, User, Phone, MapPin, Filter, Search, Eye, TestTube, Package } from 'lucide-react'
 import api from '../services/api'
 
 const LocalAdminBookings = ({ assignedLab }) => {
@@ -9,6 +9,9 @@ const LocalAdminBookings = ({ assignedLab }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [dateFilter, setDateFilter] = useState('all') // all, today, week, month, custom
+  const [startDate, setStartDate] = useState('')
+  const [endDate, setEndDate] = useState('')
   const limit = 10
 
   // Fetch bookings for the assigned lab
@@ -16,27 +19,82 @@ const LocalAdminBookings = ({ assignedLab }) => {
     if (assignedLab && assignedLab._id) {
       fetchBookings()
     }
-  }, [assignedLab, filterStatus, currentPage])
+  }, [assignedLab, filterStatus, currentPage, dateFilter, startDate, endDate])
 
   const fetchBookings = async () => {
     try {
       setLoading(true)
+      // Fetch all bookings first, then apply client-side filtering
       const response = await api.localAdminAPI.getLabBookings(
         assignedLab._id,
-        filterStatus,
-        currentPage,
-        limit
+        'all', // Get all bookings
+        1,
+        1000 // Get more bookings to allow for client-side filtering
       )
       
       if (response.success) {
-        setBookings(response.data)
-        setTotalPages(response.totalPages)
+        let allBookings = response.data || []
+        
+        // Apply status filter
+        if (filterStatus !== 'all') {
+          allBookings = allBookings.filter(booking => booking.status === filterStatus)
+        }
+        
+        // Apply date filter
+        allBookings = applyDateFilter(allBookings)
+        
+        // Sort by date and time
+        allBookings.sort((a, b) => {
+          const dateA = new Date(`${a.appointmentDate}T${a.appointmentTime || '00:00'}`)
+          const dateB = new Date(`${b.appointmentDate}T${b.appointmentTime || '00:00'}`)
+          return dateB - dateA // Most recent first
+        })
+        
+        // Apply pagination
+        const startIndex = (currentPage - 1) * limit
+        const endIndex = startIndex + limit
+        const paginatedBookings = allBookings.slice(startIndex, endIndex)
+        
+        setBookings(paginatedBookings)
+        setTotalPages(Math.ceil(allBookings.length / limit))
       }
     } catch (error) {
       console.error('Error fetching bookings:', error)
     } finally {
       setLoading(false)
     }
+  }
+
+  const applyDateFilter = (bookings) => {
+    const now = new Date()
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    
+    return bookings.filter(booking => {
+      const appointmentDate = new Date(booking.appointmentDate)
+      
+      switch (dateFilter) {
+        case 'today':
+          return appointmentDate.toDateString() === today.toDateString()
+        case 'week':
+          const weekAgo = new Date(today)
+          weekAgo.setDate(today.getDate() - 7)
+          return appointmentDate >= weekAgo
+        case 'month':
+          const monthAgo = new Date(today)
+          monthAgo.setMonth(today.getMonth() - 1)
+          return appointmentDate >= monthAgo
+        case 'custom':
+          if (startDate && endDate) {
+            const start = new Date(startDate)
+            const end = new Date(endDate)
+            end.setHours(23, 59, 59, 999) // Include the entire end date
+            return appointmentDate >= start && appointmentDate <= end
+          }
+          return true
+        default: // 'all'
+          return true
+      }
+    })
   }
 
   const handleStatusChange = (e) => {
@@ -46,6 +104,21 @@ const LocalAdminBookings = ({ assignedLab }) => {
 
   const handleSearch = (e) => {
     setSearchTerm(e.target.value)
+  }
+
+  const handleDateFilterChange = (e) => {
+    setDateFilter(e.target.value)
+    setCurrentPage(1) // Reset to first page when filter changes
+  }
+
+  const handleStartDateChange = (e) => {
+    setStartDate(e.target.value)
+    setCurrentPage(1)
+  }
+
+  const handleEndDateChange = (e) => {
+    setEndDate(e.target.value)
+    setCurrentPage(1)
   }
 
   // Filter bookings based on search term
@@ -74,13 +147,11 @@ const LocalAdminBookings = ({ assignedLab }) => {
   const getStatusColor = (status) => {
     switch (status) {
       case 'confirmed':
-        return 'bg-green-100 text-green-800'
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800'
-      case 'cancelled':
-        return 'bg-red-100 text-red-800'
-      case 'completed':
         return 'bg-blue-100 text-blue-800'
+      case 'sample_collected':
+        return 'bg-indigo-100 text-indigo-800'
+      case 'result_published':
+        return 'bg-green-100 text-green-800'
       default:
         return 'bg-gray-100 text-gray-800'
     }
@@ -119,34 +190,73 @@ const LocalAdminBookings = ({ assignedLab }) => {
 
       {/* Filters and Search */}
       <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-        <div className="flex flex-col sm:flex-row gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
           {/* Status Filter */}
           <div className="flex items-center space-x-2">
             <Filter className="h-5 w-5 text-gray-400" />
             <select
               value={filterStatus}
               onChange={handleStatusChange}
-              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 w-full"
             >
               <option value="all">All Bookings</option>
-              <option value="pending">Pending</option>
               <option value="confirmed">Confirmed</option>
-              <option value="completed">Completed</option>
-              <option value="cancelled">Cancelled</option>
+              <option value="sample_collected">Sample Collected</option>
+              <option value="result_published">Result Published</option>
             </select>
           </div>
 
-          {/* Search */}
-          <div className="flex items-center space-x-2 flex-1">
-            <Search className="h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search by patient name, email, or phone..."
-              value={searchTerm}
-              onChange={handleSearch}
-              className="border border-gray-300 rounded-md px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+          {/* Date Filter */}
+          <div className="flex items-center space-x-2">
+            <Calendar className="h-5 w-5 text-gray-400" />
+            <select
+              value={dateFilter}
+              onChange={handleDateFilterChange}
+              className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 w-full"
+            >
+              <option value="all">All Dates</option>
+              <option value="today">Today</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last 30 Days</option>
+              <option value="custom">Custom Range</option>
+            </select>
           </div>
+
+          {/* Custom Date Range */}
+          {dateFilter === 'custom' && (
+            <>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-600 whitespace-nowrap">From:</label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={handleStartDateChange}
+                  className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 w-full"
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <label className="text-sm text-gray-600 whitespace-nowrap">To:</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={handleEndDateChange}
+                  className="border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 w-full"
+                />
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Search */}
+        <div className="flex items-center space-x-2">
+          <Search className="h-5 w-5 text-gray-400" />
+          <input
+            type="text"
+            placeholder="Search by patient name, email, or phone..."
+            value={searchTerm}
+            onChange={handleSearch}
+            className="border border-gray-300 rounded-md px-3 py-2 flex-1 focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
         </div>
       </div>
 
@@ -227,22 +337,19 @@ const LocalAdminBookings = ({ assignedLab }) => {
                     <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">
                         {booking.selectedTests && booking.selectedTests.length > 0 && (
-                          <div>
-                            <div className="font-medium">Tests ({booking.selectedTests.length})</div>
-                            <div className="text-gray-500">
-                              {booking.selectedTests.slice(0, 2).map(test => test.name).join(', ')}
-                              {booking.selectedTests.length > 2 && '...'}
-                            </div>
+                          <div className="flex items-center mb-1">
+                            <TestTube className="h-4 w-4 mr-1" />
+                            <span className="font-medium">{booking.selectedTests.length} tests</span>
                           </div>
                         )}
                         {booking.selectedPackages && booking.selectedPackages.length > 0 && (
-                          <div className="mt-2">
-                            <div className="font-medium">Packages ({booking.selectedPackages.length})</div>
-                            <div className="text-gray-500">
-                              {booking.selectedPackages.slice(0, 2).map(pkg => pkg.name).join(', ')}
-                              {booking.selectedPackages.length > 2 && '...'}
-                            </div>
+                          <div className="flex items-center">
+                            <Package className="h-4 w-4 mr-1" />
+                            <span className="font-medium">{booking.selectedPackages.length} packages</span>
                           </div>
+                        )}
+                        {(!booking.selectedTests?.length && !booking.selectedPackages?.length) && (
+                          <span className="text-gray-500">No tests/packages</span>
                         )}
                       </div>
                     </td>

@@ -29,7 +29,7 @@ function App() {
               } 
             />
             <Route 
-              path="/staff/dashboard/*" 
+              path="/staff/*" 
               element={
                 <ProtectedRoute requiredRole="staff">
                   <StaffDashboard />
