@@ -5,6 +5,7 @@ import LandingPage from './pages/LandingPage'
 import Login from './pages/Login'
 import SignUp from './pages/SignUp'
 import EmailVerification from './pages/EmailVerification'
+import GoogleAuthCallback from './pages/GoogleAuthCallback'
 import AdminDashboard from './pages/AdminDashboard'
 import StaffDashboard from './pages/StaffDashboard'
 import UserDashboard from './pages/UserDashboard'
@@ -20,6 +21,8 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/verify-email" element={<EmailVerification />} />
+            <Route path="/auth/google/success" element={<GoogleAuthCallback />} />
+            <Route path="/auth/google/error" element={<GoogleAuthCallback />} />
             <Route 
               path="/admin/dashboard/*" 
               element={

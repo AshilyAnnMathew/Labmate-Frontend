@@ -1,10 +1,50 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useMemo } from 'react'
 
 const ProtectedRoute = ({ children, requiredRole = null }) => {
   const { user, loading, isAdmin, isStaff, isUser, isLocalAdmin } = useAuth()
 
-  if (loading) {
+  // Memoize the access check to prevent unnecessary re-renders
+  const accessResult = useMemo(() => {
+    if (loading) {
+      return { type: 'loading' }
+    }
+
+    if (!user) {
+      return { type: 'redirect', to: '/login' }
+    }
+
+    // Check role-based access
+    if (requiredRole === 'admin' && !isAdmin()) {
+      return { type: 'redirect', to: '/user/dashboard' }
+    }
+
+    if (requiredRole === 'staff' && !isStaff()) {
+      return { type: 'redirect', to: '/user/dashboard' }
+    }
+
+    if (requiredRole === 'local_admin' && !isLocalAdmin()) {
+      // If user is actually a local_admin but assignedLab is missing, redirect to user dashboard
+      if (user?.role === 'local_admin' && !user?.assignedLab) {
+        return { type: 'redirect', to: '/user/dashboard' }
+      }
+      return { type: 'redirect', to: '/user/dashboard' }
+    }
+
+    if (requiredRole === 'user' && !isUser()) {
+      return { type: 'redirect', to: '/user/dashboard' }
+    }
+
+    return { type: 'granted' }
+  }, [user, loading, requiredRole, isAdmin, isStaff, isUser, isLocalAdmin])
+
+  // Debug logging (only when values change)
+  if (process.env.NODE_ENV === 'development' && accessResult.type === 'granted') {
+    console.log('ProtectedRoute - Access granted for role:', requiredRole)
+  }
+
+  if (accessResult.type === 'loading') {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary-600"></div>
@@ -12,42 +52,10 @@ const ProtectedRoute = ({ children, requiredRole = null }) => {
     )
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />
+  if (accessResult.type === 'redirect') {
+    return <Navigate to={accessResult.to} replace />
   }
 
-  // Debug logging
-  console.log('ProtectedRoute - User role:', user?.role, 'Required role:', requiredRole)
-  console.log('ProtectedRoute - User data:', user)
-
-  // Check role-based access
-  if (requiredRole === 'admin' && !isAdmin()) {
-    console.log('ProtectedRoute - Admin access denied, redirecting to user dashboard')
-    return <Navigate to="/user/dashboard" replace />
-  }
-
-  if (requiredRole === 'staff' && !isStaff()) {
-    console.log('ProtectedRoute - Staff access denied, redirecting to user dashboard')
-    return <Navigate to="/user/dashboard" replace />
-  }
-
-  if (requiredRole === 'local_admin' && !isLocalAdmin()) {
-    console.log('ProtectedRoute - Local admin access denied, user role:', user?.role)
-    // If user is actually a local_admin but assignedLab is missing, redirect to user dashboard
-    if (user?.role === 'local_admin' && !user?.assignedLab) {
-      console.log('ProtectedRoute - Local admin has no assigned lab, redirecting to user dashboard')
-      return <Navigate to="/user/dashboard" replace />
-    }
-    console.log('ProtectedRoute - Redirecting to user dashboard')
-    return <Navigate to="/user/dashboard" replace />
-  }
-
-  if (requiredRole === 'user' && !isUser()) {
-    console.log('ProtectedRoute - User access denied, redirecting to user dashboard')
-    return <Navigate to="/user/dashboard" replace />
-  }
-
-  console.log('ProtectedRoute - Access granted')
   return children
 }
 

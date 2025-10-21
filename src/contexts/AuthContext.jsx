@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
 
 const AuthContext = createContext()
 
@@ -33,40 +33,40 @@ export const AuthProvider = ({ children }) => {
     setLoading(false)
   }, [])
 
-  const login = (userData, token) => {
+  const login = useCallback((userData, token) => {
     setUser(userData)
     localStorage.setItem('token', token)
     localStorage.setItem('user', JSON.stringify(userData))
-  }
+  }, [])
 
-  const logout = () => {
+  const logout = useCallback(() => {
     setUser(null)
     localStorage.removeItem('token')
     localStorage.removeItem('user')
-  }
+  }, [])
 
-  const updateUser = (updatedUserData) => {
+  const updateUser = useCallback((updatedUserData) => {
     setUser(updatedUserData)
     localStorage.setItem('user', JSON.stringify(updatedUserData))
-  }
+  }, [])
 
-  const isAdmin = () => {
+  const isAdmin = useCallback(() => {
     return user?.role === 'admin'
-  }
+  }, [user?.role])
 
-  const isStaff = () => {
+  const isStaff = useCallback(() => {
     return ['staff', 'lab_technician', 'xray_technician'].includes(user?.role)
-  }
+  }, [user?.role])
 
-  const isUser = () => {
+  const isUser = useCallback(() => {
     return user?.role === 'user'
-  }
+  }, [user?.role])
 
-  const isLocalAdmin = () => {
+  const isLocalAdmin = useCallback(() => {
     return user?.role === 'local_admin'
-  }
+  }, [user?.role])
 
-  const value = {
+  const value = useMemo(() => ({
     user,
     loading,
     login,
@@ -77,7 +77,7 @@ export const AuthProvider = ({ children }) => {
     isUser,
     isLocalAdmin,
     isAuthenticated: !!user
-  }
+  }), [user, loading, login, logout, updateUser, isAdmin, isStaff, isUser, isLocalAdmin])
 
   return (
     <AuthContext.Provider value={value}>

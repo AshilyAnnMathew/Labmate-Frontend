@@ -54,6 +54,34 @@ const BookTests = () => {
     '16:00', '16:30', '17:00', '17:30'
   ]
 
+  // Get available time slots based on selected date
+  const getAvailableTimeSlots = () => {
+    if (!selectedDate) return timeSlots
+    
+    const today = new Date()
+    const selectedDateObj = new Date(selectedDate)
+    const currentTime = new Date()
+    
+    // If selected date is today, filter out past times
+    if (selectedDateObj.toDateString() === today.toDateString()) {
+      const currentHour = currentTime.getHours()
+      const currentMinute = currentTime.getMinutes()
+      const currentTimeString = `${currentHour.toString().padStart(2, '0')}:${currentMinute.toString().padStart(2, '0')}`
+      
+      return timeSlots.filter(timeSlot => {
+        // Add 30 minutes buffer to current time to allow for booking
+        const [hour, minute] = timeSlot.split(':').map(Number)
+        const slotTime = hour * 60 + minute
+        const bufferTime = currentHour * 60 + currentMinute + 30
+        
+        return slotTime >= bufferTime
+      })
+    }
+    
+    // For future dates, return all time slots
+    return timeSlots
+  }
+
   useEffect(() => {
     getCurrentLocation()
     fetchLabs()
@@ -305,23 +333,27 @@ const BookTests = () => {
         userLocation: userLocation
       }
 
+      console.log('Creating booking with data:', bookingData)
+      
       // Create booking
       const response = await bookingAPI.createBooking(bookingData)
       
+      console.log('Booking response:', response)
+      
       if (paymentMethod === 'pay_now') {
-        // Handle Razorpay payment
-        await handleRazorpayPayment(response.data)
+        // Show bill information popup before Razorpay
+        await showBillPopup(response.data)
       } else {
         // Pay later - booking confirmed
-      await Swal.fire({
-        icon: 'success',
-        title: 'Booking Confirmed!',
+        await Swal.fire({
+          icon: 'success',
+          title: 'Booking Confirmed!',
           text: `Your appointment at ${selectedLab.name} has been scheduled for ${selectedDate} at ${selectedTime}. Payment due at the lab.`,
-        confirmButtonColor: '#2563eb',
-        confirmButtonText: 'OK'
-      })
+          confirmButtonColor: '#2563eb',
+          confirmButtonText: 'OK'
+        })
 
-      // Reset form
+        // Reset form
         resetBookingForm()
       }
       
@@ -337,20 +369,95 @@ const BookTests = () => {
     }
   }
 
+  // Show bill information popup
+  const showBillPopup = async (booking) => {
+    const totalAmount = booking.totalAmount || 0
+    
+    // Calculate selected items for display
+    const selectedTestsData = selectedLab.availableTestsDetails
+      ?.filter(test => selectedTests.includes(test._id)) || []
+    const selectedPackagesData = selectedLab.availablePackagesDetails
+      ?.filter(packageItem => selectedPackages.includes(packageItem._id)) || []
+
+    const result = await Swal.fire({
+      title: 'Payment Summary',
+      html: `
+        <div class="text-left">
+          <div class="mb-4">
+            <h4 class="font-semibold text-gray-900 mb-2">Lab: ${selectedLab.name}</h4>
+            <p class="text-sm text-gray-600">Appointment: ${formatDate(selectedDate)} at ${selectedTime}</p>
+          </div>
+          
+          ${selectedTestsData.length > 0 ? `
+            <div class="mb-3">
+              <h5 class="font-medium text-gray-800">Tests (${selectedTestsData.length})</h5>
+              <div class="ml-2 space-y-1">
+                ${selectedTestsData.map(test => `
+                  <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">${test.name}</span>
+                    <span class="text-gray-900">₹${test.price}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          ${selectedPackagesData.length > 0 ? `
+            <div class="mb-3">
+              <h5 class="font-medium text-gray-800">Packages (${selectedPackagesData.length})</h5>
+              <div class="ml-2 space-y-1">
+                ${selectedPackagesData.map(packageItem => `
+                  <div class="flex justify-between text-sm">
+                    <span class="text-gray-600">${packageItem.name}</span>
+                    <span class="text-gray-900">₹${packageItem.price}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          ` : ''}
+          
+          <div class="border-t pt-2 mt-3">
+            <div class="flex justify-between text-lg font-semibold">
+              <span>Total Amount:</span>
+              <span class="text-primary-600">₹${totalAmount}</span>
+            </div>
+          </div>
+        </div>
+      `,
+      showCancelButton: true,
+      confirmButtonText: 'Pay Now',
+      cancelButtonText: 'Cancel',
+      confirmButtonColor: '#2563eb',
+      cancelButtonColor: '#6b7280',
+      width: '500px'
+    })
+
+    if (result.isConfirmed) {
+      await handleRazorpayPayment(booking)
+    } else {
+      // User cancelled payment, reset form
+      resetBookingForm()
+    }
+  }
+
   // Handle Razorpay payment
   const handleRazorpayPayment = async (booking) => {
     try {
+      // First create Razorpay order
+      const orderResponse = await bookingAPI.createOrder(booking._id)
+      const orderData = orderResponse.data
+
       // Load Razorpay script dynamically
       const script = document.createElement('script')
       script.src = 'https://checkout.razorpay.com/v1/checkout.js'
       script.onload = () => {
         const options = {
-          key: 'rzp_test_YOUR_RAZORPAY_KEY', // Replace with your Razorpay key
-          amount: booking.totalAmount * 100, // Amount in paise
-          currency: 'INR',
+          key: 'rzp_test_R79jO6N4F99QLG', // Your Razorpay key
+          amount: orderData.amount, // Amount in paise from order
+          currency: orderData.currency,
           name: 'LabMate360',
           description: `Booking for ${selectedLab.name}`,
-          order_id: booking.razorpayOrderId || null, // You'll need to create an order first
+          order_id: orderData.orderId,
           handler: async function (response) {
             try {
               // Process payment
@@ -385,6 +492,16 @@ const BookTests = () => {
           },
           theme: {
             color: '#2563eb'
+          },
+          modal: {
+            ondismiss: function() {
+              Swal.fire({
+                icon: 'warning',
+                title: 'Payment Cancelled',
+                text: 'Payment was cancelled. Your booking is still pending.',
+                confirmButtonColor: '#2563eb'
+              })
+            }
           }
         }
 
@@ -394,7 +511,12 @@ const BookTests = () => {
       document.body.appendChild(script)
     } catch (err) {
       console.error('Razorpay error:', err)
-      throw err
+      Swal.fire({
+        icon: 'error',
+        title: 'Payment Failed',
+        text: err.message || 'Failed to initialize payment',
+        confirmButtonColor: '#dc2626'
+      })
     }
   }
 
@@ -425,6 +547,19 @@ const BookTests = () => {
   const getMinDate = () => {
     const today = new Date()
     return today.toISOString().split('T')[0]
+  }
+
+  // Handle date change and reset time if needed
+  const handleDateChange = (newDate) => {
+    setSelectedDate(newDate)
+    
+    // Reset selected time if it's no longer available
+    if (selectedTime && newDate) {
+      const availableSlots = getAvailableTimeSlots()
+      if (!availableSlots.includes(selectedTime)) {
+        setSelectedTime('')
+      }
+    }
   }
 
   // Format date for display
@@ -916,7 +1051,7 @@ const BookTests = () => {
                 <input
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
+                  onChange={(e) => handleDateChange(e.target.value)}
                   min={getMinDate()}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
@@ -930,10 +1065,15 @@ const BookTests = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="">Choose time slot</option>
-                  {timeSlots.map(time => (
+                  {getAvailableTimeSlots().map(time => (
                     <option key={time} value={time}>{time}</option>
                   ))}
                 </select>
+                {selectedDate && getAvailableTimeSlots().length === 0 && (
+                  <p className="text-sm text-orange-600 mt-1">
+                    No available time slots for today. Please select a future date.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -1148,7 +1288,7 @@ const BookTests = () => {
                 <input
                   type="date"
                   value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
+                  onChange={(e) => handleDateChange(e.target.value)}
                   min={getMinDate()}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 />
@@ -1162,10 +1302,15 @@ const BookTests = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
                   <option value="">Choose time slot</option>
-                  {timeSlots.map(time => (
+                  {getAvailableTimeSlots().map(time => (
                     <option key={time} value={time}>{time}</option>
                   ))}
                 </select>
+                {selectedDate && getAvailableTimeSlots().length === 0 && (
+                  <p className="text-sm text-orange-600 mt-1">
+                    No available time slots for today. Please select a future date.
+                  </p>
+                )}
               </div>
             </div>
           </div>

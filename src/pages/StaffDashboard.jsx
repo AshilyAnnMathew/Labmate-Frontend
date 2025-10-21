@@ -5,12 +5,14 @@ import {
   Upload, 
   FileText, 
   MessageSquare,
-  TestTube
+  TestTube,
+  FileSearch
 } from 'lucide-react'
 import DashboardLayout from '../layouts/DashboardLayout'
 import PlaceholderPage from '../components/common/PlaceholderPage'
 import AssignedBookings from './AssignedBookings'
 import UploadReports from './UploadReports'
+import StaffReports from './StaffReports'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
 
@@ -64,6 +66,11 @@ const StaffDashboard = () => {
       icon: Upload
     },
     {
+      path: '/staff/view-reports',
+      label: 'View Reports',
+      icon: FileSearch
+    },
+    {
       path: '/staff/prescriptions',
       label: 'Prescription Handling',
       icon: FileText
@@ -106,7 +113,7 @@ const StaffDashboard = () => {
     <PlaceholderPage
       title="Prescription Handling"
       description="Process and manage patient prescriptions and test requests"
-      icon="FileText"
+      icon={FileText}
       features={[
         {
           title: "Prescription Review",
@@ -132,7 +139,7 @@ const StaffDashboard = () => {
     <PlaceholderPage
       title="Patient Communication"
       description="Communicate with patients about their tests and results"
-      icon="MessageSquare"
+      icon={MessageSquare}
       features={[
         {
           title: "Result Notifications",
@@ -255,7 +262,7 @@ const StaffDashboard = () => {
 
     const updateBookingStatus = async (bookingId, status) => {
       try {
-        const response = await api.bookingAPI.updateBookingStatus(bookingId, status);
+        const response = await api.bookingAPI.updateBookingStatus(bookingId, { status });
         if (response.success) {
           await refreshBookings();
         }
@@ -461,6 +468,7 @@ const StaffDashboard = () => {
         <Route path="/dashboard" element={<AssignedOverview assignedLab={assignedLab} />} />
         <Route path="/dashboard/" element={<AssignedOverview assignedLab={assignedLab} />} />
         <Route path="/upload-reports" element={<UploadReports />} />
+        <Route path="/view-reports" element={<StaffReports />} />
         <Route path="/prescriptions" element={<PrescriptionHandling />} />
         <Route path="/communication" element={<PatientCommunication />} />
         <Route path="*" element={<Navigate to="/staff/dashboard" replace />} />

@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { 
   Calendar, 
   Upload, 
@@ -15,6 +15,7 @@ import DownloadReports from './DownloadReports'
 import NearbyLabs from '../components/NearbyLabs'
 import BookTests from './BookTests'
 import MyBookings from './MyBookings'
+import UploadPrescription from './UploadPrescription'
 import ProfileCompletionModal from '../components/ProfileCompletionModal'
 import { useAuth } from '../contexts/AuthContext'
 import { authAPI } from '../services/api'
@@ -23,29 +24,75 @@ const UserDashboard = () => {
   const { user, updateUser, loading } = useAuth()
   const [showProfileModal, setShowProfileModal] = useState(false)
   const [isProfileComplete, setIsProfileComplete] = useState(true)
+  const hasRefreshedUser = useRef(false)
+
+  // Memoized function to check profile completeness
+  const checkProfileCompleteness = useCallback((currentUser) => {
+    if (!currentUser) return false
+
+    const userAge = currentUser.age
+    const userGender = currentUser.gender
+    const userDateOfBirth = currentUser.dateOfBirth
+    
+    // Convert age to number if it's in MongoDB format or string
+    const ageValue = typeof userAge === 'object' && userAge.$numberInt 
+      ? parseInt(userAge.$numberInt) 
+      : typeof userAge === 'string' 
+      ? parseInt(userAge) 
+      : userAge
+    
+    const hasAge = ageValue !== null && ageValue !== undefined && !isNaN(ageValue) && ageValue > 0
+    const hasGender = userGender && userGender.trim() !== ''
+    const hasAddress = currentUser.address && currentUser.address.trim() !== ''
+    
+    // Match backend isProfileComplete logic: age OR dateOfBirth, gender, and address
+    const hasAgeOrDateOfBirth = hasAge || (userDateOfBirth && new Date(userDateOfBirth).getTime() > 0)
+    const profileComplete = hasAgeOrDateOfBirth && hasGender && hasAddress
+    
+    return profileComplete
+  }, [])
 
   // Check if profile is complete
   useEffect(() => {
     // Don't check profile completeness while still loading user data
-    if (loading) {
+    if (loading || !user) {
       return
     }
     
-    if (user) {
+    // Only refresh user data once per session to avoid infinite loops
+    if (!hasRefreshedUser.current) {
+      hasRefreshedUser.current = true
+      
       // Refresh user data from backend to ensure we have latest profile data
       const refreshUserData = async () => {
         try {
-          const response = await fetch('/api/auth/me', {
+          const response = await fetch('http://localhost:5000/api/auth/me', {
+            method: 'GET',
             headers: {
-              'Authorization': `Bearer ${localStorage.getItem('token')}`
+              'Authorization': `Bearer ${localStorage.getItem('token')}`,
+              'Content-Type': 'application/json'
             }
           })
+          
           if (response.ok) {
             const data = await response.json()
-            if (data.success && data.data.user) {
-              updateUser(data.data.user)
-              return data.data.user
+            let refreshedUser = null
+            
+            if (data.success && data.data && data.data.user) {
+              refreshedUser = data.data.user
+            } else if (data.success && data.user) {
+              refreshedUser = data.user
             }
+            
+            if (refreshedUser) {
+              // Only update if the data is actually different to prevent loops
+              if (JSON.stringify(refreshedUser) !== JSON.stringify(user)) {
+                updateUser(refreshedUser)
+              }
+              return refreshedUser
+            }
+          } else {
+            console.error('Failed to refresh user data:', response.status, response.statusText)
           }
         } catch (error) {
           console.error('Error refreshing user data:', error)
@@ -53,62 +100,25 @@ const UserDashboard = () => {
         return user
       }
       
-      // Use refreshed data if available, otherwise use current user data
       refreshUserData().then(currentUser => {
-        // Check if all required profile fields are present and valid
-        // Handle MongoDB number format and various data types
-        const userAge = currentUser.age
-        const userGender = currentUser.gender
-        const userDateOfBirth = currentUser.dateOfBirth
-      
-      console.log('Raw user data:', {
-        age: userAge,
-        gender: userGender,
-        dateOfBirth: userDateOfBirth,
-        ageType: typeof userAge,
-        genderType: typeof userGender,
-        dateOfBirthType: typeof userDateOfBirth
-      })
-      
-      // Convert age to number if it's in MongoDB format or string
-      const ageValue = typeof userAge === 'object' && userAge.$numberInt 
-        ? parseInt(userAge.$numberInt) 
-        : typeof userAge === 'string' 
-        ? parseInt(userAge) 
-        : userAge
-      
-        const hasAge = ageValue !== null && ageValue !== undefined && !isNaN(ageValue) && ageValue > 0
-        const hasGender = userGender && userGender.trim() !== ''
-        const hasAddress = currentUser.address && currentUser.address.trim() !== ''
-        
-        // Match backend isProfileComplete logic: age OR dateOfBirth, gender, and address
-        const hasAgeOrDateOfBirth = hasAge || (userDateOfBirth && new Date(userDateOfBirth).getTime() > 0)
-        const profileComplete = hasAgeOrDateOfBirth && hasGender && hasAddress
+        const profileComplete = checkProfileCompleteness(currentUser)
         setIsProfileComplete(profileComplete)
         
         console.log('Profile completeness check:', {
           currentUser,
-          ageValue,
-          hasAge,
-          hasGender,
-          hasAddress,
-          hasAgeOrDateOfBirth,
           profileComplete
         })
         
         // Show modal only if profile is incomplete
-        if (!profileComplete) {
-          setShowProfileModal(true)
-        } else {
-          setShowProfileModal(false)
-        }
+        setShowProfileModal(!profileComplete)
       })
     } else {
-      // No user data yet, don't show modal
-      setIsProfileComplete(true)
-      setShowProfileModal(false)
+      // Use existing user data to check profile completeness
+      const profileComplete = checkProfileCompleteness(user)
+      setIsProfileComplete(profileComplete)
+      setShowProfileModal(!profileComplete)
     }
-  }, [user, loading])
+  }, [user, loading, updateUser, checkProfileCompleteness])
 
   const handleProfileComplete = (updatedUser) => {
     // Update the user context with the new data
@@ -164,31 +174,6 @@ const UserDashboard = () => {
   ]
 
 
-  const UploadPrescription = () => (
-    <PlaceholderPage
-      title="Upload Prescription"
-      description="Upload your doctor's prescription for laboratory tests"
-      icon={Upload}
-      features={[
-        {
-          title: "Secure Upload",
-          description: "Safely upload prescription images and documents"
-        },
-        {
-          title: "Prescription Validation",
-          description: "Automatic validation of prescription format and content"
-        },
-        {
-          title: "Doctor Verification",
-          description: "Verification with prescribing doctor when needed"
-        },
-        {
-          title: "Test Authorization",
-          description: "Automatic test authorization based on prescription"
-        }
-      ]}
-    />
-  )
 
 
   // Replaced with real page in ./DownloadReports.jsx
@@ -222,6 +207,9 @@ const UserDashboard = () => {
 
   // HealthBot Component
   const HealthBot = () => {
+    // API key constant - fallback for environment variable
+    const API_KEY = 'AIzaSyAywhccPmyHxbbK_D5hhM6n7tC8PnX_El0'
+    
     const [messages, setMessages] = useState([
       {
         id: 1,
@@ -250,36 +238,64 @@ const UserDashboard = () => {
       setIsLoading(true)
 
       try {
+        // Check if the question is health/laboratory related
+        const healthKeywords = [
+          'health', 'medical', 'doctor', 'test', 'lab', 'laboratory', 'blood', 'urine', 'symptom', 'disease', 'condition', 'medicine', 'drug', 'treatment', 'diagnosis', 'result', 'report', 'checkup', 'examination', 'prescription', 'vitamin', 'supplement', 'exercise', 'diet', 'nutrition', 'wellness', 'fitness', 'pain', 'injury', 'illness', 'covid', 'vaccine', 'immunization', 'prevention', 'screening', 'biomarker', 'cholesterol', 'diabetes', 'blood pressure', 'heart', 'cancer', 'infection', 'allergy', 'asthma', 'mental health', 'stress', 'anxiety', 'depression'
+        ]
+        
+        const userQuestion = inputMessage.toLowerCase()
+        const isHealthRelated = healthKeywords.some(keyword => userQuestion.includes(keyword))
+        
+        if (!isHealthRelated) {
+          const redirectMessage = {
+            id: Date.now() + 1,
+            text: "I'm HealthBot, specialized in health and laboratory-related questions only. I can help you with:\n\n• Health questions and concerns\n• Laboratory test explanations\n• Health tips and wellness advice\n• Understanding medical reports\n• General health guidance\n\nPlease ask me something health-related, or visit the Support section for other assistance.",
+            isBot: true,
+            timestamp: new Date()
+          }
+          
+          setTimeout(() => {
+            setMessages(prev => [...prev, redirectMessage])
+            setIsTyping(false)
+            setIsLoading(false)
+          }, 500)
+          return
+        }
+
         // Call Google Gemini API
         const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-goog-api-key': process.env.REACT_APP_GOOGLE_AI_API_KEY || 'AIzaSyAywhccPmyHxbbK_D5hhM6n7tC8PnX_El0'
+            'X-goog-api-key': API_KEY
           },
           body: JSON.stringify({
             contents: [
               {
                 parts: [
                   {
-                    text: `You are HealthBot, a friendly and knowledgeable AI health assistant for a laboratory management system. 
+                    text: `You are HealthBot, a specialized AI health assistant for a laboratory management system. You ONLY respond to health, medical, and laboratory-related questions.
 
 User context:
 - Patient: ${user?.firstName} ${user?.lastName}
 - Age: ${user?.age || 'Not specified'}
 - Gender: ${user?.gender || 'Not specified'}
 
-Guidelines for responses:
-1. Be friendly, empathetic, and professional
-2. Provide helpful health information and general guidance
-3. Always remind users to consult healthcare professionals for medical advice
-4. You can help explain lab test results if they provide them
-5. Keep responses concise but informative (2-4 sentences)
-6. Use simple, easy-to-understand language
-7. Do not provide specific medical diagnoses or treatment recommendations
-8. Always end with asking if they need help with anything else
+STRICT GUIDELINES:
+1. ONLY answer health, medical, laboratory, or wellness-related questions
+2. If asked about non-health topics, politely redirect to health topics
+3. Be friendly, empathetic, and professional
+4. Provide helpful health information and general guidance
+5. Always remind users to consult healthcare professionals for medical advice
+6. You can help explain lab test results if they provide them
+7. Keep responses concise but informative (2-4 sentences)
+8. Use simple, easy-to-understand language
+9. Do not provide specific medical diagnoses or treatment recommendations
+10. Always end with asking if they need help with any other health questions
 
-User's question: ${inputMessage}`
+User's health question: ${inputMessage}
+
+Remember: Only respond if this is health/medical/laboratory related. If not, politely redirect to health topics.`
                   }
                 ]
               }
@@ -422,10 +438,12 @@ User's question: ${inputMessage}`
           {/* Quick Suggestions */}
           <div className="mt-3 flex flex-wrap gap-2">
             {[
-              "What should I know about my lab results?",
+              "What do my lab results mean?",
               "How to prepare for blood tests?",
-              "General health tips",
-              "When to see a doctor?"
+              "What are normal cholesterol levels?",
+              "When should I see a doctor?",
+              "How to improve my health?",
+              "What tests should I get regularly?"
             ].map((suggestion, index) => (
               <button
                 key={index}

@@ -27,6 +27,8 @@ import Swal from 'sweetalert2'
 import DashboardLayout from '../layouts/DashboardLayout'
 import PlaceholderPage from '../components/common/PlaceholderPage'
 import ManageLabs from './ManageLabs'
+import AdminBookings from './AdminBookings'
+import AdminReports from './AdminReports'
 import api from '../services/api'
 const { staffAPI, testAPI, packageAPI, labAPI } = api
 
@@ -3189,49 +3191,9 @@ const AdminDashboard = () => {
     )
   }
 
-  const ViewBookings = () => (
-    <PlaceholderPage
-      title="View Bookings"
-      description="Monitor and manage all laboratory bookings and appointments"
-      icon={Calendar}
-      features={[
-        {
-          title: "Booking Calendar",
-          description: "Visual calendar view of all appointments and schedules"
-        },
-        {
-          title: "Resource Allocation",
-          description: "Manage equipment and staff allocation for optimal efficiency"
-        },
-        {
-          title: "Conflict Resolution",
-          description: "Handle booking conflicts and rescheduling requests"
-        }
-      ]}
-    />
-  )
+  const ViewBookings = () => <AdminBookings />
 
-  const ReportsAnalytics = () => (
-    <PlaceholderPage
-      title="Reports & Analytics"
-      description="Generate comprehensive reports and analyze system performance"
-      icon={BarChart3}
-      features={[
-        {
-          title: "Performance Metrics",
-          description: "Track key performance indicators and operational efficiency"
-        },
-        {
-          title: "Financial Reports",
-          description: "Generate revenue, cost, and profitability reports"
-        },
-        {
-          title: "Usage Analytics",
-          description: "Analyze user behavior and system usage patterns"
-        }
-      ]}
-    />
-  )
+  const ReportsAnalytics = () => <AdminReports />
 
   const SettingsPage = () => (
     <PlaceholderPage

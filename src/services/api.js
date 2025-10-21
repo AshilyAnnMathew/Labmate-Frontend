@@ -738,7 +738,7 @@ const bookingAPI = {
   },
 
   // Process payment for booking
-  processPayment: async (bookingId) => {
+  processPayment: async (bookingId, paymentData = {}) => {
     try {
       const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/payment`, {
         method: 'POST',
@@ -746,7 +746,7 @@ const bookingAPI = {
           'Authorization': `Bearer ${getAuthToken()}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({})
+        body: JSON.stringify(paymentData)
       });
       const data = await response.json();
       if (!response.ok) {
@@ -757,7 +757,142 @@ const bookingAPI = {
       console.error('Error processing payment:', error);
       throw error;
     }
-  }
+  },
+
+  // Create Razorpay order
+  createOrder: async (bookingId) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/create-order`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create order');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error creating order:', error);
+      throw error;
+    }
+  },
+
+  // Admin: Get all bookings
+  getAdminBookings: async (queryParams = '') => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/admin/all?${queryParams}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch admin bookings');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error fetching admin bookings:', error);
+      throw error;
+    }
+  },
+
+  // Update booking status (works for both admin and staff)
+  updateBookingStatus: async (id, statusData) => {
+    try {
+      // Get user info to determine the correct endpoint
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const isAdmin = user.role === 'admin';
+      
+      // Use admin endpoint for admin users, regular endpoint for staff/local admin
+      const endpoint = isAdmin 
+        ? `${API_BASE_URL}/bookings/admin/${id}/status`
+        : `${API_BASE_URL}/bookings/${id}/status`;
+      
+      const response = await fetch(endpoint, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(statusData),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to update booking status');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error updating booking status:', error);
+      throw error;
+    }
+  },
+
+  // Admin: Delete booking
+  deleteBooking: async (id) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/admin/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to delete booking');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error deleting booking:', error);
+      throw error;
+    }
+  },
+
+  // Process payment for booking (supports both Razorpay and lab payments)
+  processPayment: async (bookingId, paymentData = {}) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/bookings/${bookingId}/payment`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(paymentData),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to process payment');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error processing payment:', error);
+      throw error;
+    }
+  },
+
+    // Get lab reports (for staff)
+    getLabReports: async (labId, status = 'all', page = 1, limit = 50) => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/bookings/lab/${labId}/reports?status=${status}&page=${page}&limit=${limit}`, {
+          headers: {
+            'Authorization': `Bearer ${getAuthToken()}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.message || 'Failed to fetch lab reports');
+        }
+        return data;
+      } catch (error) {
+        console.error('Error fetching lab reports:', error);
+        throw error;
+      }
+    }
 
 };
 
@@ -1288,6 +1423,133 @@ export const localAdminAPI = {
   }
 };
 
+// Check if email exists
+export const checkEmailExists = async (email) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/auth/check-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email }),
+    });
+    const data = await response.json();
+    return data.exists || false;
+  } catch (error) {
+    console.error('Error checking email:', error);
+    return false;
+  }
+};
+
+// Google OAuth API
+export const googleAuthAPI = {
+  // Initiate Google OAuth flow
+  initiateGoogleAuth: () => {
+    const backendUrl = API_BASE_URL;
+    window.location.href = `${backendUrl}/auth/google`;
+  },
+
+  // Handle Google OAuth success callback
+  handleGoogleCallback: async (token, userData) => {
+    try {
+      // Store token and user data
+      localStorage.setItem('authToken', token);
+      localStorage.setItem('user', JSON.stringify(userData));
+      
+      return {
+        success: true,
+        data: {
+          user: userData,
+          token: token
+        }
+      };
+    } catch (error) {
+      console.error('Error handling Google callback:', error);
+      throw error;
+    }
+  }
+};
+
+// Admin API
+export const adminAPI = {
+  // Get comprehensive analytics data
+  getAnalytics: async (params = {}) => {
+    try {
+      const queryString = new URLSearchParams(params).toString();
+      const response = await fetch(`${API_BASE_URL}/admin/analytics?${queryString}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch analytics');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error fetching analytics:', error);
+      throw error;
+    }
+  },
+
+  // Get dashboard statistics
+  getDashboardStats: async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/dashboard-stats`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to fetch dashboard stats');
+      }
+      return data;
+    } catch (error) {
+      console.error('Error fetching dashboard stats:', error);
+      throw error;
+    }
+  },
+
+  // Export reports
+  exportReports: async (format = 'json', period = '30') => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/admin/reports/export?format=${format}&period=${period}`, {
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (format === 'csv') {
+        // Handle CSV download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `bookings-${period}-days.csv`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        return { success: true, message: 'CSV exported successfully' };
+      } else {
+        // Handle JSON response
+        const data = await response.json();
+        if (!response.ok) {
+          throw new Error(data.message || 'Failed to export reports');
+        }
+        return data;
+      }
+    } catch (error) {
+      console.error('Error exporting reports:', error);
+      throw error;
+    }
+  }
+};
+
 export default {
   authAPI,
   staffAPI,
@@ -1297,6 +1559,8 @@ export default {
   bookingAPI,
   resultsAPI,
   localAdminAPI,
+  adminAPI,
+  googleAuthAPI,
   setAuthToken,
   getAuthToken,
   removeAuthToken,

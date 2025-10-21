@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import { FileText, Download, Eye, Calendar, TestTube, Brain, Loader2 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import api from '../services/api'
@@ -14,34 +14,42 @@ const DownloadReports = () => {
   const [aiAnalysis, setAiAnalysis] = useState({})
   const [analyzing, setAnalyzing] = useState({})
   
-  // Initialize Google Generative AI
-  const genAI = new GoogleGenerativeAI(process.env.REACT_APP_GOOGLE_AI_API_KEY || 'AIzaSyAywhccPmyHxbbK_D5hhM6n7tC8PnX_El0')
+  // API key constant - fallback for environment variable
+  const API_KEY = 'AIzaSyAywhccPmyHxbbK_D5hhM6n7tC8PnX_El0'
+  
+  // Initialize Google Generative AI with useMemo to prevent recreation on every render
+  const genAI = useMemo(() => new GoogleGenerativeAI(API_KEY), [])
+
+  // Memoize the fetch function to prevent unnecessary re-renders
+  const fetchBookings = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError('')
+      // Fetch user's bookings and filter those with reports or results
+      const res = await api.bookingAPI.getBookings('all', 1, 100)
+      const data = res?.data || res // support both {data} and array
+      const items = (data || []).filter(b => b.reportFile || (Array.isArray(b.testResults) && b.testResults.length > 0))
+      setBookings(items)
+    } catch (e) {
+      setError(e.message || 'Failed to load reports')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    const fetch = async () => {
-      try {
-        setLoading(true)
-        setError('')
-        // Fetch user's bookings and filter those with reports or results
-        const res = await api.bookingAPI.getBookings('all', 1, 100)
-        const data = res?.data || res // support both {data} and array
-        const items = (data || []).filter(b => b.reportFile || (Array.isArray(b.testResults) && b.testResults.length > 0))
-        setBookings(items)
-      } catch (e) {
-        setError(e.message || 'Failed to load reports')
-      } finally {
-        setLoading(false)
-      }
+    if (user) {
+      fetchBookings()
     }
-    if (user) fetch()
-  }, [user])
+  }, [user, fetchBookings])
 
-  const formatDate = (d) => new Date(d).toLocaleDateString('en-US', {
+  // Memoize formatDate function to prevent recreation on every render
+  const formatDate = useCallback((d) => new Date(d).toLocaleDateString('en-US', {
     year: 'numeric', month: 'short', day: 'numeric'
-  })
+  }), [])
 
   // AI Analysis Functions
-  const extractTextFromPDF = async (fileUrl) => {
+  const extractTextFromPDF = useCallback(async (fileUrl) => {
     try {
       // For now, we'll use a simple approach
       // In a real implementation, you might want to use PDF.js or similar
@@ -50,14 +58,14 @@ const DownloadReports = () => {
       console.error('Error extracting text from PDF:', error)
       return ''
     }
-  }
+  }, [])
 
   // Function to list available models (for debugging)
-  const listAvailableModels = async () => {
+  const listAvailableModels = useCallback(async () => {
     try {
         const response = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
         headers: {
-          'X-goog-api-key': process.env.REACT_APP_GOOGLE_AI_API_KEY || 'AIzaSyAywhccPmyHxbbK_D5hhM6n7tC8PnX_El0'
+          'X-goog-api-key': API_KEY
         }
       })
       const data = await response.json()
@@ -67,9 +75,9 @@ const DownloadReports = () => {
       console.error('Error listing models:', error)
       return null
     }
-  }
+  }, [API_KEY])
 
-  const analyzeResultsWithAI = async (booking) => {
+  const analyzeResultsWithAI = useCallback(async (booking) => {
     try {
       setAnalyzing(prev => ({ ...prev, [booking._id]: true }))
       
@@ -146,7 +154,7 @@ Please format your response in a clear, structured manner suitable for a patient
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'X-goog-api-key': process.env.REACT_APP_GOOGLE_AI_API_KEY || 'AIzaSyAywhccPmyHxbbK_D5hhM6n7tC8PnX_El0'
+            'X-goog-api-key': API_KEY
           },
           body: JSON.stringify({
             contents: [
@@ -188,9 +196,9 @@ Please format your response in a clear, structured manner suitable for a patient
     } finally {
       setAnalyzing(prev => ({ ...prev, [booking._id]: false }))
     }
-  }
+  }, [genAI, formatDate, extractTextFromPDF, listAvailableModels])
 
-  const downloadResultsPdf = (booking) => {
+  const downloadResultsPdf = useCallback((booking) => {
     try {
       console.log('Starting PDF generation for booking:', booking._id)
       
@@ -595,7 +603,7 @@ Please format your response in a clear, structured manner suitable for a patient
       console.error('Error generating PDF:', error)
       alert('Failed to generate PDF report. Please try again.')
     }
-  }
+  }, [formatDate])
 
   return (
     <div className="p-6 space-y-6">
