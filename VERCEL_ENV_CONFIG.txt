@@ -1,0 +1,36 @@
+════════════════════════════════════════════════════════════
+  VERCEL ENVIRONMENT VARIABLES - COPY & PASTE READY
+════════════════════════════════════════════════════════════
+
+Go to: https://vercel.com/dashboard
+→ Select your "labmate-frontend" project
+→ Settings → Environment Variables
+→ Add the following:
+
+────────────────────────────────────────────────────────────
+
+Key:   VITE_API_URL
+Value: https://labmate-backend.onrender.com/api
+
+────────────────────────────────────────────────────────────
+
+OPTIONAL (for Google Maps):
+
+Key:   VITE_GOOGLE_MAPS_API_KEY
+Value: YOUR_GOOGLE_MAPS_API_KEY
+
+────────────────────────────────────────────────────────────
+
+OPTIONAL (for AI features):
+
+Key:   VITE_GEMINI_API_KEY
+Value: YOUR_GEMINI_API_KEY
+
+────────────────────────────────────────────────────────────
+
+✅ After adding, go to Deployments tab
+   → Click "..." on latest deployment
+   → Click "Redeploy"
+
+════════════════════════════════════════════════════════════
+
